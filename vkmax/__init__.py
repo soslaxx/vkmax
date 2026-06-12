@@ -25,6 +25,7 @@ from .models import (
     VerifyCodeResult,
 )
 from ._contacts import dm_chat_id
+from ._messages import POLL_ANONYMOUS, POLL_MULTIPLE, POLL_QUIZ
 from ._notify import MUTE_FOREVER, MUTE_OFF
 from .html_parse import parse_html
 from .markdown import parse_markdown
@@ -56,6 +57,9 @@ __all__ = [
     "LoginResult",
     "MUTE_FOREVER",
     "MUTE_OFF",
+    "POLL_ANONYMOUS",
+    "POLL_MULTIPLE",
+    "POLL_QUIZ",
     "MaxClient",
     "MaxError",
     "Message",

@@ -130,6 +130,11 @@ class Chat:
             raise RuntimeError("Chat is detached from a client")
         return await self.client.upload_file(self.id, path, **kwargs)
 
+    async def send_poll(self, title: str, options: list[str], **kwargs: Any) -> Any:
+        if self.client is None:
+            raise RuntimeError("Chat is detached from a client")
+        return await self.client.send_poll(self.id, title, options, **kwargs)
+
     async def leave(self) -> Any:
         if self.client is None:
             raise RuntimeError("Chat is detached from a client")

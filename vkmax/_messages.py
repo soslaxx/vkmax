@@ -471,6 +471,57 @@ async def send_sticker(
     return _extract_message_id(packet)
 
 
+POLL_ANONYMOUS = 1
+POLL_MULTIPLE = 2
+POLL_QUIZ = 4
+
+
+async def send_poll(
+    client: "MaxClient",
+    chat_id: int,
+    title: str,
+    options: list[str],
+    *,
+    anonymous: bool = False,
+    multiple: bool = False,
+    quiz: bool = False,
+    settings: int | None = None,
+    notify: bool = True,
+) -> str:
+    if not title or not isinstance(title, str):
+        raise ValueError("poll title is required")
+    cleaned = [str(o).strip() for o in options if str(o).strip()]
+    if len(cleaned) < 2:
+        raise ValueError("poll needs at least two non-empty options")
+    if settings is None:
+        flags = 0
+        if anonymous:
+            flags |= POLL_ANONYMOUS
+        if multiple:
+            flags |= POLL_MULTIPLE
+        if quiz:
+            flags |= POLL_QUIZ
+        settings = flags
+    attach: dict[str, Any] = {
+        "_type": "POLL",
+        "title": title,
+        "answers": [{"text": opt} for opt in cleaned],
+        "settings": int(settings),
+    }
+    packet = await client.invoke(
+        Opcode.MSG_SEND,
+        {
+            "chatId": chat_id,
+            "message": {
+                "cid": -int(time.time() * 1000),
+                "attaches": [attach],
+            },
+            "notify": notify,
+        },
+    )
+    return _extract_message_id(packet)
+
+
 async def request_upload_url(client: "MaxClient", *, count: int = 1) -> FileUpload:
     packet = await client.invoke(Opcode.FILE_UPLOAD, {"count": count})
     info = packet.payload.get("info") if isinstance(packet.payload, dict) else None
