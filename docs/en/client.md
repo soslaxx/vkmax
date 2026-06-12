@@ -1,97 +1,143 @@
-# MaxClient
+# Client
 
-The single entry point. All RPC helpers are methods on it.
+The pyrogram-style entry point. `Client` extends `MaxClient`, so
+every low-level method is still available; on top it adds typed
+event dispatch and helpers.
 
 ```python
-MaxClient(
-    session: str | Path | DeviceSession = "main",
-    *,
-    host: str = "api.oneme.ru",
-    port: int = 443,
-    request_timeout: float = 30.0,
-    ping_interval: float = 30.0,
-    auto_reconnect: bool = True,
-    reconnect_delay: float = 1.0,
-    max_reconnect_delay: float = 30.0,
-    save_session: bool = True,
+from vkmax import Client
+
+app = Client(
+    session="main",                  # session name → ~/.vkmax/main.json
+    host="api.oneme.ru",
+    port=443,
+    request_timeout=30.0,
+    ping_interval=30.0,
+    auto_reconnect=True,
+    reconnect_delay=1.0,
+    max_reconnect_delay=30.0,
+    save_session=True,
+    proxy=None,                      # str | ProxyConfig | None
 )
 ```
 
-## Lifecycle
+## Three ways to start
+
+### 1. `app.run()` — synchronous, blocks until Ctrl+C
 
 ```python
-await client.connect()       # TLS + handshake
-await client.login(token)    # opcode LOGIN (19)
-await client.disconnect()    # cancel tasks, close socket
+app = Client("main")
+app.run()
 ```
 
-`connect()` is idempotent. `disconnect()` cancels the ping loop, the
-reconnect loop, and closes the writer.
+Under the hood: `asyncio.run(connect() → login(token) → wait forever)`.
+Use this for userbots.
 
-As a context manager:
+### 2. `app.run(main_coroutine)` — run an async entry point
 
 ```python
-async with MaxClient("main") as client:
-    await client.login(token)
+import asyncio
+
+async def main():
+    await app.send_message(307609904, "hi")
+
+app.run(main())
+```
+
+### 3. Manual lifecycle
+
+```python
+async def main():
+    app = Client("main")
+    await app.start_session()        # connect + login
+    try:
+        await app.send_message(307609904, "hi")
+    finally:
+        await app.disconnect()
+
+asyncio.run(main())
+```
+
+Or as a context manager (inherited from `MaxClient`):
+
+```python
+async with Client("main") as app:
+    await app.login(app.device.token)
     ...
 ```
 
-## `start()`
-
-Convenience wrapper around `connect` + `login` / `request_code` +
-`sign_in`:
-
-```python
-await client.start(
-    token=None,
-    phone=None,
-    code_callback=None,
-    password_callback=None,
-)
-```
-
-Logic:
-
-1. If `token` (or `client.device.token`) is set, try `login`. If it is
-   accepted, return `LoginResult`.
-2. Otherwise call `request_code(phone)`, prompt via `code_callback`,
-   then `sign_in`. If the response requires a password, prompt via
-   `password_callback`, call `check_password`, then `login`.
-
 ## Auto-reconnect
 
-Any server-side disconnect (timeout, validation error, network) is
-caught by the transport. When `auto_reconnect=True` a background task
-reconnects with exponential backoff (`reconnect_delay` →
-`max_reconnect_delay`) and re-logs in using the cached token.
+With `auto_reconnect=True` (default) any disconnect — server
+validation error, ping timeout, broken socket — is recovered in the
+background:
 
-`invoke()` waits for the connection to come back (up to
-`wait_for_reconnect`, default 15s) before retrying once. After that it
-raises `NotConnected` / `TransportClosed`.
+1. A reconnect task waits `reconnect_delay` (doubling on each
+   failure, capped at `max_reconnect_delay`).
+2. It dials the host again, redoes the handshake and `login(token)`.
+3. The next `invoke()` waits up to 15 s for the connection to come
+   back and retries once. Failure raises `NotConnected`.
+
+Server-side **validation errors** (`proto.payload`) are special: the
+server returns `cmd=ERROR` and immediately drops the TCP socket.
+`vkmax` reconnects transparently, so your *next* call works.
 
 ## Pings
 
-While connected, `vkmax` sends `Opcode.PING` every `ping_interval`
-seconds (default 30). On a timeout the connection is treated as broken
-and auto-reconnect kicks in.
+While connected, `Client` sends `Opcode.PING` every `ping_interval`
+seconds (30 by default). Without pings the server times out the
+connection after ~2 minutes.
 
-## Low level
+## Proxy
+
+Pass a proxy URL or a `ProxyConfig`:
 
 ```python
-packet = await client.invoke(Opcode.MSG_GET_STAT, {
-    "chatId": chat_id, "messageId": int(message_id),
-})
-packet.cmd      # 1 = ok, 3 = error
-packet.payload  # dict from the server
+Client("main", proxy="socks5://user:pass@127.0.0.1:1080")
+Client("main", proxy="http://10.0.0.1:8080")
 ```
 
-All opcodes are in `vkmax.Opcode`.
+Supported schemes: `http`, `https` (CONNECT), `socks5`, `socks5h`
+(remote DNS). Full details: [proxy.md](proxy.md).
 
-## Attributes
+## Attributes after login
 
-- `client.device` — `DeviceSession`.
-- `client.token`, `client.account_id`, `client.me` — set after login.
-- `client.config` — `{user, chats, ...}` snapshot from the LOGIN reply.
-- `client.handshake` — server response to opcode 6.
-- `client.calls_seed`, `client.server_time` — convenience.
-- `client.transport` — raw `Transport` (with `.is_connected`).
+| Attribute | Meaning |
+|---|---|
+| `app.account_id` | your user id |
+| `app.me` | dict from the LOGIN response |
+| `app.token` | cached login token |
+| `app.config["user"]` | privacy settings snapshot |
+| `app.config["chats"]` | per-chat notification settings |
+| `app.server_time` | server time in ms at LOGIN |
+| `app.handshake` | dict from the SESSION_INIT response |
+| `app.transport` | raw `Transport` (`.is_connected`) |
+| `app.device` | `DeviceSession` (mutate, then `app.device.save(path)`) |
+
+## Helpers
+
+```python
+user = await app.get_me()              # User
+user = await app.get_user(user_id)     # User | None
+chat = await app.get_chat(chat_id)     # Chat | None  (pyrogram-style)
+```
+
+All inherited `MaxClient` methods stay available — see [messages.md](
+messages.md), [chats.md](chats.md), [contacts.md](contacts.md),
+[profile.md](profile.md), [privacy.md](privacy.md), etc.
+
+## Low-level access
+
+For opcodes without a wrapper:
+
+```python
+from vkmax import Opcode
+
+packet = await app.invoke(Opcode.MSG_GET_STAT, {
+    "chatId": chat_id, "messageId": int(message_id),
+})
+packet.cmd       # 1=OK, 3=ERROR
+packet.payload   # dict from server
+```
+
+See [low-level.md](low-level.md).

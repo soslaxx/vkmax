@@ -1,3 +1,4 @@
+from . import filters
 from .client import MaxClient
 from .enums import Opcode
 from .exceptions import (
@@ -33,8 +34,10 @@ from .privacy import (
     PrivacyAudience,
     PrivacyKey,
 )
+from .pyromax import Client
 from .reactions import REACTION_ALIASES, resolve_reaction
 from .session import DeviceSession, create_device_session, default_session_path, load_or_create_session
+from .types import Chat as ChatType, Message as MessageType, User as UserType
 
 __version__ = "2.0.0"
 
@@ -42,6 +45,8 @@ __all__ = [
     "Attachment",
     "AuthError",
     "Chat",
+    "ChatType",
+    "Client",
     "Contact",
     "DeviceSession",
     "FamilyProtectionLevel",
@@ -54,6 +59,7 @@ __all__ = [
     "MaxClient",
     "MaxError",
     "Message",
+    "MessageType",
     "NotConnected",
     "Opcode",
     "Packet",
@@ -67,7 +73,9 @@ __all__ = [
     "TransportClosed",
     "UploadError",
     "UploadProgress",
+    "UserType",
     "VerifyCodeResult",
+    "filters",
     "__version__",
     "create_device_session",
     "default_session_path",

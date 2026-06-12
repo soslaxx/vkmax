@@ -23,6 +23,7 @@ from .models import (
     VerifyCodeResult,
 )
 from .protocol import chat_cache_fingerprint
+from .proxy import ProxyConfig
 from .reactions import resolve_reaction
 from .session import DeviceSession, default_session_path, load_or_create_session
 from .transport import Transport
@@ -44,6 +45,7 @@ class MaxClient:
         reconnect_delay: float = 1.0,
         max_reconnect_delay: float = 30.0,
         save_session: bool = True,
+        proxy: str | ProxyConfig | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -53,6 +55,10 @@ class MaxClient:
         self.reconnect_delay = reconnect_delay
         self.max_reconnect_delay = max_reconnect_delay
         self._save_session = save_session
+        if isinstance(proxy, str):
+            self.proxy: ProxyConfig | None = ProxyConfig.from_url(proxy)
+        else:
+            self.proxy = proxy
         self._session_path: Path | None = None
         if isinstance(session, DeviceSession):
             self.device = session
@@ -62,7 +68,7 @@ class MaxClient:
             else:
                 self._session_path = default_session_path(str(session))
             self.device = load_or_create_session(self._session_path)
-        self.transport = Transport(host, port, request_timeout=request_timeout)
+        self.transport = Transport(host, port, request_timeout=request_timeout, proxy=self.proxy)
         self.transport.set_disconnect_handler(self._handle_disconnect)
         self.handshake: dict[str, Any] | None = None
         self.calls_seed: int | None = None

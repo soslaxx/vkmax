@@ -1,97 +1,142 @@
-# MaxClient
+# Client
 
-Единственная точка входа. Все RPC-хелперы — методы этого класса.
+Pyrogram-style точка входа. `Client` наследует `MaxClient`, поэтому
+все низкоуровневые методы остаются на месте; сверху добавлены
+типизированный диспатч событий и удобные хелперы.
 
 ```python
-MaxClient(
-    session: str | Path | DeviceSession = "main",
-    *,
-    host: str = "api.oneme.ru",
-    port: int = 443,
-    request_timeout: float = 30.0,
-    ping_interval: float = 30.0,
-    auto_reconnect: bool = True,
-    reconnect_delay: float = 1.0,
-    max_reconnect_delay: float = 30.0,
-    save_session: bool = True,
+from vkmax import Client
+
+app = Client(
+    session="main",                  # имя сессии → ~/.vkmax/main.json
+    host="api.oneme.ru",
+    port=443,
+    request_timeout=30.0,
+    ping_interval=30.0,
+    auto_reconnect=True,
+    reconnect_delay=1.0,
+    max_reconnect_delay=30.0,
+    save_session=True,
+    proxy=None,                      # str | ProxyConfig | None
 )
 ```
 
-## Жизненный цикл
+## Три способа запуска
+
+### 1. `app.run()` — блокирующий, до Ctrl+C
 
 ```python
-await client.connect()       # TLS + handshake
-await client.login(token)    # опкод LOGIN (19)
-await client.disconnect()    # отменить таски, закрыть сокет
+app = Client("main")
+app.run()
 ```
 
-`connect()` идемпотентен. `disconnect()` останавливает ping-loop,
-reconnect-loop, закрывает writer.
+Внутри: `asyncio.run(connect() → login(token) → ждать вечно)`.
+Используется для юзерботов.
 
-Как контекст-менеджер:
+### 2. `app.run(main_coroutine)` — async entry-point
 
 ```python
-async with MaxClient("main") as client:
-    await client.login(token)
+import asyncio
+
+async def main():
+    await app.send_message(307609904, "hi")
+
+app.run(main())
+```
+
+### 3. Ручной жизненный цикл
+
+```python
+async def main():
+    app = Client("main")
+    await app.start_session()        # connect + login
+    try:
+        await app.send_message(307609904, "hi")
+    finally:
+        await app.disconnect()
+
+asyncio.run(main())
+```
+
+Как контекст-менеджер (унаследовано от `MaxClient`):
+
+```python
+async with Client("main") as app:
+    await app.login(app.device.token)
     ...
 ```
 
-## `start()`
-
-Обёртка над `connect` + `login` / `request_code` + `sign_in`:
-
-```python
-await client.start(
-    token=None,
-    phone=None,
-    code_callback=None,
-    password_callback=None,
-)
-```
-
-Логика:
-
-1. Если есть `token` (или `client.device.token`) — пробует `login`.
-   При успехе возвращает `LoginResult`.
-2. Иначе зовёт `request_code(phone)`, спрашивает код через
-   `code_callback`, затем `sign_in`. Если требуется пароль 2FA —
-   спрашивает через `password_callback`, делает `check_password`, потом
-   `login`.
-
 ## Автореконнект
 
-Любое серверное закрытие соединения (таймаут, ошибка валидации, сеть)
-перехватывается транспортом. При `auto_reconnect=True` фоновый таск
-переподключается с экспоненциальным backoff (`reconnect_delay` →
-`max_reconnect_delay`) и логинится по сохранённому токену.
+С `auto_reconnect=True` (по умолчанию) любой разрыв соединения —
+ошибка валидации сервера, таймаут пингов, сбой сети — восстанавливается
+в фоне:
 
-`invoke()` ждёт восстановления соединения (до `wait_for_reconnect`,
-по умолчанию 15 с) и один раз повторяет запрос. После этого бросает
-`NotConnected` / `TransportClosed`.
+1. Reconnect-таск ждёт `reconnect_delay` (удваивается на каждой
+   неудаче, потолок `max_reconnect_delay`).
+2. Открывает соединение заново, делает handshake и `login(token)`.
+3. Следующий `invoke()` ждёт до 15 с восстановления и однократно
+   ретраит запрос. Если не выходит — `NotConnected`.
+
+**Ошибки валидации** (`proto.payload`) — отдельный случай: сервер
+отвечает `cmd=ERROR` и сразу закрывает TCP-соединение. `vkmax`
+переподключается прозрачно, следующий вызов работает.
 
 ## Пинги
 
-Пока соединение живо, `vkmax` шлёт `Opcode.PING` каждые
-`ping_interval` секунд (по умолчанию 30). По таймауту соединение
-считается умершим и срабатывает автореконнект.
+Клиент шлёт `Opcode.PING` каждые `ping_interval` секунд (30 по
+умолчанию). Без пингов сервер таймаутит соединение примерно через
+2 минуты.
 
-## Низкоуровневые вызовы
+## Прокси
 
 ```python
-packet = await client.invoke(Opcode.MSG_GET_STAT, {
-    "chatId": chat_id, "messageId": int(message_id),
-})
-packet.cmd      # 1 = ok, 3 = error
-packet.payload  # dict от сервера
+Client("main", proxy="socks5://user:pass@127.0.0.1:1080")
+Client("main", proxy="http://10.0.0.1:8080")
 ```
 
-Все опкоды — в `vkmax.Opcode`.
+Поддержка: `http`, `https` (CONNECT), `socks5`, `socks5h` (remote DNS).
+Подробности: [proxy.md](proxy.md).
 
-## Атрибуты
+## Атрибуты после login
 
-- `client.device` — `DeviceSession`.
-- `client.token`, `client.account_id`, `client.me` — после login.
-- `client.config` — `{user, chats, ...}` снапшот из LOGIN.
-- `client.handshake` — ответ сервера на опкод 6.
-- `client.calls_seed`, `client.server_time` — служебные.
-- `client.transport` — `Transport` (с `.is_connected`).
+| Атрибут | Что это |
+|---|---|
+| `app.account_id` | твой user id |
+| `app.me` | dict из LOGIN |
+| `app.token` | сохранённый login token |
+| `app.config["user"]` | снапшот настроек приватности |
+| `app.config["chats"]` | настройки уведомлений по чатам |
+| `app.server_time` | время сервера (ms) на момент LOGIN |
+| `app.handshake` | dict из SESSION_INIT |
+| `app.transport` | `Transport` (`.is_connected`) |
+| `app.device` | `DeviceSession` (меняй, потом `app.device.save(path)`) |
+
+## Хелперы
+
+```python
+user = await app.get_me()              # User
+user = await app.get_user(user_id)     # User | None
+chat = await app.get_chat(chat_id)     # Chat | None  (pyrogram-style)
+```
+
+Все унаследованные методы `MaxClient` доступны как есть — см.
+[messages.md](messages.md), [chats.md](chats.md),
+[contacts.md](contacts.md), [profile.md](profile.md),
+[privacy.md](privacy.md), и т.д.
+
+## Низкоуровневый доступ
+
+Для опкодов без обёртки:
+
+```python
+from vkmax import Opcode
+
+packet = await app.invoke(Opcode.MSG_GET_STAT, {
+    "chatId": chat_id, "messageId": int(message_id),
+})
+packet.cmd       # 1=OK, 3=ERROR
+packet.payload   # dict от сервера
+```
+
+См. [low-level.md](low-level.md).

@@ -9,6 +9,7 @@ from .enums import CMD_ERROR, CMD_NOT_FOUND, CMD_OK, Opcode
 from .exceptions import PacketError, SessionExpired, TransportClosed
 from .models import Packet
 from .protocol import HEADER_SIZE, pack_packet, packet_size_from_header, unpack_packet
+from .proxy import ProxyConfig, open_proxied_connection
 
 HandlerType = Callable[[Packet], Any]
 
@@ -22,12 +23,14 @@ class Transport:
         request_timeout: float = 30.0,
         ssl_context: ssl.SSLContext | None = None,
         use_tls: bool = True,
+        proxy: ProxyConfig | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.request_timeout = request_timeout
         self.use_tls = use_tls
         self.ssl_context = ssl_context
+        self.proxy = proxy
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._reader_task: asyncio.Task[None] | None = None
@@ -48,8 +51,16 @@ class Transport:
     async def connect(self) -> None:
         if self.is_connected:
             return
-        if self.use_tls:
-            context = self.ssl_context or ssl.create_default_context()
+        context = self.ssl_context or ssl.create_default_context() if self.use_tls else None
+        if self.proxy is not None:
+            self._reader, self._writer = await open_proxied_connection(
+                self.proxy,
+                self.host,
+                self.port,
+                ssl_context=context,
+                server_hostname=self.host if context else None,
+            )
+        elif context is not None:
             self._reader, self._writer = await asyncio.open_connection(
                 self.host,
                 self.port,

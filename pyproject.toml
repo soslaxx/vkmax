@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vkmax"
-version = "2.0.0"
-description = "Async Python client for MAX messenger mobile API"
+version = "3.0.0"
+description = "Async Python client for MAX messenger mobile API. After 3.0.0 looks like PyroGram"
 readme = "README.md"
 authors = [{name = "nsdkinx", email = "nsdkinx@ya.ru"}]
 license = { file = "LICENSE" }

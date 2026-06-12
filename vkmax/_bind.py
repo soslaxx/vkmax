@@ -19,6 +19,7 @@ _MESSAGES = [
     "get_message_stats", "save_draft", "discard_draft", "send_vote", "get_poll_updates",
     "get_voters_by_answer", "send_sticker", "request_upload_url", "request_photo_upload_url",
     "upload_file", "send_file", "upload_photo", "send_photos", "send_photo",
+    "upload_video", "send_video", "request_video_upload_url",
     "get_file_url", "get_photo_url", "get_video_url", "get_audio_url", "transcribe_audio",
 ]
 

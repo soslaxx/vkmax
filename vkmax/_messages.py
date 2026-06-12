@@ -493,6 +493,24 @@ async def request_photo_upload_url(client: "MaxClient", *, count: int = 1, profi
     return url
 
 
+async def request_video_upload_url(client: "MaxClient", *, count: int = 1) -> FileUpload:
+    packet = await client.invoke(Opcode.VIDEO_UPLOAD, {"count": count})
+    payload = packet.payload if isinstance(packet.payload, dict) else {}
+    info = payload.get("info")
+    first: dict[str, Any] | None = None
+    if isinstance(info, list) and info and isinstance(info[0], dict):
+        first = info[0]
+    elif isinstance(payload.get("url"), str):
+        first = payload
+    if not isinstance(first, dict) or not first.get("url"):
+        raise UploadError("video upload info is missing in server response")
+    return FileUpload(
+        url=str(first.get("url") or ""),
+        file_id=int(first.get("videoId") or first.get("fileId") or 0),
+        token=str(first.get("token") or ""),
+    )
+
+
 async def upload_file(
     client: "MaxClient",
     chat_id: int,
@@ -526,17 +544,88 @@ async def send_file(
         attach["token"] = token
     else:
         attach["fileId"] = file_id
-    payload = {
-        "chatId": chat_id,
-        "message": {
-            "isLive": False,
-            "detectShare": False,
-            "elements": [],
-            "cid": -int(time.time() * 1000),
-            "attaches": [attach],
-        },
-        "notify": notify,
+    return await _send_attach(
+        client,
+        chat_id,
+        attach,
+        notify=notify,
+        attempts=attempts,
+        retry_delay=retry_delay,
+        extra_message={"isLive": False, "detectShare": False, "elements": []},
+    )
+
+
+async def upload_video(
+    client: "MaxClient",
+    chat_id: int,
+    path: str | Path,
+    *,
+    filename: str | None = None,
+    notify: bool = True,
+    progress: ProgressCallback | None = None,
+    attempts: int = 30,
+    retry_delay: float = 1.0,
+) -> FileUpload:
+    info = await request_video_upload_url(client)
+    await send_typing(client, chat_id, kind="VIDEO")
+    status = await upload_binary(info.url, path, filename=filename, progress=progress)
+    if status not in (0, 200, 201, 204):
+        raise UploadError(f"video upload failed with HTTP {status}")
+    await send_video(
+        client,
+        chat_id,
+        token=info.token,
+        notify=notify,
+        attempts=attempts,
+        retry_delay=retry_delay,
+    )
+    return info
+
+
+async def send_video(
+    client: "MaxClient",
+    chat_id: int,
+    *,
+    token: str | None = None,
+    video_id: int | None = None,
+    notify: bool = True,
+    attempts: int = 30,
+    retry_delay: float = 1.0,
+) -> bool:
+    if not token and not video_id:
+        raise ValueError("send_video requires token or video_id")
+    attach: dict[str, Any] = {"_type": "VIDEO"}
+    if video_id is not None:
+        attach["videoId"] = int(video_id)
+    if token:
+        attach["token"] = token
+    return await _send_attach(
+        client,
+        chat_id,
+        attach,
+        notify=notify,
+        attempts=attempts,
+        retry_delay=retry_delay,
+    )
+
+
+async def _send_attach(
+    client: "MaxClient",
+    chat_id: int,
+    attach: dict[str, Any],
+    *,
+    notify: bool,
+    attempts: int,
+    retry_delay: float,
+    extra_message: dict[str, Any] | None = None,
+) -> bool:
+    message: dict[str, Any] = {
+        "cid": -int(time.time() * 1000),
+        "attaches": [attach],
     }
+    if extra_message:
+        message.update(extra_message)
+    payload = {"chatId": chat_id, "message": message, "notify": notify}
     for attempt in range(attempts):
         try:
             packet = await client.invoke(Opcode.MSG_SEND, payload)

@@ -1,15 +1,15 @@
 # Chat folders
 
 Folders group chats in the sidebar. The server stores the canonical
-list; the client maintains a sync counter.
+list; the client maintains a `folderSync` cursor.
 
 ## Read
 
 ```python
-result = await client.get_folders(folder_sync=0)
+result = await app.get_folders(folder_sync=0)
 # {"folderSync": 1781243858452, "folders": [...]}
 
-folder = await client.get_folder("<folder_id>")
+folder = await app.get_folder("<folder_id>")
 ```
 
 Each folder has `id, title, include, favorites, filters, options,
@@ -22,7 +22,7 @@ There is no separate "create" RPC: send an `update` for a non-existent
 `id` and the server creates it.
 
 ```python
-await client.update_folder(
+await app.update_folder(
     folder_id="my.folder",
     title="Friends",
     include=[-75800508459204, 307609904],
@@ -42,16 +42,26 @@ Fields:
 ## Reorder
 
 ```python
-await client.reorder_folders(["all.chat.folder", "my.folder"])
+await app.reorder_folders(["all.chat.folder", "my.folder"])
 ```
 
 ## Delete
 
 ```python
-await client.delete_folder("my.folder")
+await app.delete_folder("my.folder")
 ```
 
 ## Push event
 
-Updates arrive as `Opcode.NOTIF_FOLDERS` (277) — register a handler
-to react to changes from other devices.
+Updates arrive as `Opcode.NOTIF_FOLDERS` (277):
+
+```python
+from vkmax import Opcode
+
+
+async def on_folders(packet):
+    print(packet.payload)
+
+
+app.transport.on(Opcode.NOTIF_FOLDERS, on_folders)
+```
