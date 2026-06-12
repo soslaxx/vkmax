@@ -52,10 +52,12 @@ await chat.send("hello")
 await chat.send_photo("photo.jpg")
 await chat.send_video("clip.mp4")
 await chat.send_file("doc.pdf")
+await chat.send_poll("title", ["yes", "no"])
 await chat.leave()
 await chat.mute()                    # MUTE_FOREVER
 await chat.mute(until=int(time.time()*1000) + 3600_000)
 await chat.unmute()
+new_link = await chat.revoke_invite_link()
 ```
 
 Also: `chat.is_private`, `chat.is_group`, `chat.is_channel`.
@@ -63,11 +65,47 @@ Also: `chat.is_private`, `chat.is_group`, `chat.is_channel`.
 ## Create
 
 ```python
-chat = await app.create_group("Title", [user_id1, user_id2])
-chat = await app.create_channel("Title", user_ids=[...])
+group = await app.create_group("Title", [user_id1, user_id2])
+channel = await app.create_channel("Title", user_ids=[...])
 ```
 
-Both return the raw chat dict from the server.
+Both return the raw chat dict from the server. The most useful keys:
+
+```python
+chat = await app.create_channel("vkmax test channel")
+print(chat["id"])              # negative integer
+print(chat["type"])            # "CHANNEL" or "CHAT"
+print(chat["link"])            # private invite link
+print(chat["owner"])           # your account id
+print(chat["options"])         # dict of feature flags
+print(chat["adminParticipants"])  # {your_id: {permissions: 2047}}
+```
+
+Channels are created **private** by default (`access="PRIVATE"`).
+There is no public-username flow over the mobile API at the moment —
+the `username` / `alias` fields on `CHAT_UPDATE` are silently ignored.
+
+## Invite links
+
+Fresh chats already have a private invite link in `chat["link"]`.
+Rotate (revoke) it whenever you need a new one:
+
+```python
+new_link = await app.revoke_invite_link(chat_id)
+print(new_link)  # https://max.ru/join/<new-token>
+```
+
+It also works through a typed `Chat`:
+
+```python
+chat = await app.get_chat(chat_id)
+new_link = await chat.revoke_invite_link()
+```
+
+Under the hood this sends `CHAT_UPDATE` with
+`{"revokePrivateLink": True}` — the old link stops working immediately.
+Resolve any join link without joining via
+`await app.check_chat_link(link)` or `await app.get_link_info(link)`.
 
 ## Members
 

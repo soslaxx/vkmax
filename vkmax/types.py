@@ -150,6 +150,11 @@ class Chat:
             raise RuntimeError("Chat is detached from a client")
         return await self.client.unmute_chat(self.id)
 
+    async def revoke_invite_link(self) -> str | None:
+        if self.client is None:
+            raise RuntimeError("Chat is detached from a client")
+        return await self.client.revoke_invite_link(self.id)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any], *, client: "Client | None" = None) -> "Chat":
         admins_raw = data.get("admins", []) or data.get("adminParticipants", {})

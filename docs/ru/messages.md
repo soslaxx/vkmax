@@ -137,10 +137,102 @@ await client.send_sticker(chat_id, sticker_id, pack_id=None)
 
 ## Опросы
 
+### Создание
+
 ```python
-await client.send_vote(chat_id, message_id, poll_id, [answer_id])
-await client.get_poll_updates(chat_id, message_id, poll_id)
-await client.get_voters_by_answer(chat_id, message_id, poll_id, answer_id)
+await app.send_poll(chat_id, "Заголовок", ["вариант A", "вариант B"])
+```
+
+Полная сигнатура:
+
+```python
+await app.send_poll(
+    chat_id,
+    title,
+    options,                # list[str], минимум 2 непустых элемента
+    *,
+    anonymous=False,        # голосующие скрыты
+    multiple=False,         # можно выбрать несколько вариантов
+    quiz=False,             # результаты видны только после голоса
+    settings=None,          # битовая маска вручную, перекрывает флаги выше
+    notify=True,
+)
+```
+
+Возвращает id сообщения с опросом. Сервер присваивает:
+
+- `pollId` — нужен для голосования и чтения состояния.
+- `answerId` каждому варианту (1, 2, 3, …).
+
+Если уже есть типизированный `Chat`:
+
+```python
+chat = await app.get_chat(chat_id)
+await chat.send_poll("Заголовок", ["a", "b"], anonymous=True)
+```
+
+### Флаги
+
+`settings` — битовая маска. Константы экспортированы:
+
+```python
+from vkmax import POLL_ANONYMOUS, POLL_MULTIPLE, POLL_QUIZ
+
+await app.send_poll(
+    chat_id, "?", ["да", "нет"],
+    settings=POLL_ANONYMOUS | POLL_QUIZ,
+)
+```
+
+| Константа | Бит | Что значит |
+|---|---|---|
+| `POLL_ANONYMOUS` | 1 | голосующие не видны |
+| `POLL_MULTIPLE` | 2 | можно выбрать несколько ответов |
+| `POLL_QUIZ` | 4 | результаты только после голоса |
+
+Ключевые аргументы (`anonymous=`, `multiple=`, `quiz=`) — это шорткат
+над тем же `settings`.
+
+### Проголосовать
+
+```python
+await app.send_vote(chat_id, message_id, poll_id, [answer_id])
+```
+
+- `message_id` — id сообщения с опросом.
+- `poll_id` — `pollId` из вложения.
+- `answer_ids` — список `answerId`. Если опрос не `POLL_MULTIPLE`,
+  передавай ровно один.
+
+### Прочитать состояние
+
+```python
+state = await app.get_poll_updates(chat_id, message_id, poll_id)
+# {"polls": [{"pollId": ..., "answers": [...], "state": {...}}]}
+
+voters = await app.get_voters_by_answer(
+    chat_id, message_id, poll_id, answer_id, count=50, offset=0
+)
+```
+
+`state.result[i].voteCount` и `state.result[i].rate` — текущий счёт;
+`state.total` — всего проголосовавших; `state.voterPreviewIds` —
+первые несколько голосов (только если опрос не анонимный).
+
+### Прочитать из сообщения
+
+Опрос приходит как вложение с `attachment.type == "POLL"`. В
+`attachment.raw` интересные поля:
+
+```python
+for a in message.attachments:
+    if a.type == "POLL":
+        raw = a.raw
+        print(raw["title"], raw["pollId"], raw["settings"])
+        for answer in raw["answers"]:
+            print(" ", answer["answerId"], answer["text"])
+        state = raw.get("state") or {}
+        print("всего:", state.get("total"))
 ```
 
 ## Распознавание голосовых

@@ -29,7 +29,7 @@ _CHATS = [
     "add_admin", "remove_admin", "get_join_requests", "approve_join_requests", "decline_join_requests",
     "transfer_ownership", "join_chat", "check_chat_link",
     "leave_chat", "update_chat", "set_chat_title", "set_chat_options", "set_chat_photo",
-    "set_chat_mute", "delete_chat", "get_chat_media", "clear_chat", "hide_chat",
+    "set_chat_mute", "revoke_invite_link", "delete_chat", "get_chat_media", "clear_chat", "hide_chat",
     "subscribe_chat", "set_pin_visibility", "get_link_info", "get_common_participants",
     "get_chat_suggestions", "set_chat_personal_config", "create_group", "create_channel",
     "set_chat_reactions_settings", "get_chat_reactions_settings", "complain_chat",

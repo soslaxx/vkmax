@@ -148,10 +148,102 @@ await app.send_sticker(chat_id, sticker_id, pack_id=None)
 
 ## Polls
 
+### Create
+
+```python
+await app.send_poll(chat_id, "Title", ["option A", "option B"])
+```
+
+Full signature:
+
+```python
+await app.send_poll(
+    chat_id,
+    title,
+    options,                # list[str], at least 2 non-empty entries
+    *,
+    anonymous=False,        # voters are not visible
+    multiple=False,         # voter can pick more than one answer
+    quiz=True,              # show results only after voting
+    settings=None,          # raw bitmask, overrides the three flags above
+    notify=True,
+)
+```
+
+Returns the message id of the poll. The server assigns:
+
+- `pollId` — used by all the methods below.
+- `answerId` for each option (1, 2, 3, …).
+
+React to the typed `Chat` helper if you already have one:
+
+```python
+chat = await app.get_chat(chat_id)
+await chat.send_poll("Title", ["a", "b"], anonymous=True)
+```
+
+### Flags
+
+`settings` is a bitmask. Constants live on the package:
+
+```python
+from vkmax import POLL_ANONYMOUS, POLL_MULTIPLE, POLL_QUIZ
+
+await app.send_poll(
+    chat_id, "?", ["yes", "no"],
+    settings=POLL_ANONYMOUS | POLL_QUIZ,
+)
+```
+
+| Constant | Bit | Meaning |
+|---|---|---|
+| `POLL_ANONYMOUS` | 1 | voters are not visible |
+| `POLL_MULTIPLE` | 2 | voter can pick more than one answer |
+| `POLL_QUIZ` | 4 | results are visible only after the user votes |
+
+The keyword arguments (`anonymous=`, `multiple=`, `quiz=`) are
+shortcuts over the same bitmask.
+
+### Vote
+
 ```python
 await app.send_vote(chat_id, message_id, poll_id, [answer_id])
-await app.get_poll_updates(chat_id, message_id, poll_id)
-await app.get_voters_by_answer(chat_id, message_id, poll_id, answer_id)
+```
+
+- `message_id` — id of the message that contains the poll.
+- `poll_id` — value of `pollId` returned in the poll attachment.
+- `answer_ids` — list of `answerId` to submit. If the poll is not
+  `POLL_MULTIPLE`, pass exactly one id.
+
+### Read state
+
+```python
+state = await app.get_poll_updates(chat_id, message_id, poll_id)
+# {"polls": [{"pollId": ..., "answers": [...], "state": {...}}]}
+
+voters = await app.get_voters_by_answer(
+    chat_id, message_id, poll_id, answer_id, count=50, offset=0
+)
+```
+
+`state.result[i].voteCount` and `state.result[i].rate` show the live
+tally; `state.total` is the total number of voters; `state.voterPreviewIds`
+lists the first few participants (only when the poll is not anonymous).
+
+### Inspect from a message
+
+Poll attachments arrive as `attachment.type == "POLL"`. Useful fields
+in `attachment.raw`:
+
+```python
+for a in message.attachments:
+    if a.type == "POLL":
+        raw = a.raw
+        print(raw["title"], raw["pollId"], raw["settings"])
+        for answer in raw["answers"]:
+            print(" ", answer["answerId"], answer["text"])
+        state = raw.get("state") or {}
+        print("total:", state.get("total"))
 ```
 
 ## Audio transcription

@@ -38,11 +38,47 @@ last_event_time, new_messages, options, raw`.
 ## Создать
 
 ```python
-chat = await client.create_group("Название", [user_id1, user_id2])
-chat = await client.create_channel("Название", user_ids=[...])
+group = await app.create_group("Название", [user_id1, user_id2])
+channel = await app.create_channel("Название", user_ids=[...])
 ```
 
-Возвращает сырой dict чата.
+Возвращает сырой dict чата. Полезные ключи:
+
+```python
+chat = await app.create_channel("vkmax test channel")
+print(chat["id"])              # отрицательный int
+print(chat["type"])            # "CHANNEL" или "CHAT"
+print(chat["link"])            # приватная invite-ссылка
+print(chat["owner"])           # твой account_id
+print(chat["options"])         # dict флагов
+print(chat["adminParticipants"])  # {твой_id: {permissions: 2047}}
+```
+
+Каналы создаются **приватными** (`access="PRIVATE"`). Публичный
+username через мобильное API сейчас не выставляется — поля
+`username` / `alias` в `CHAT_UPDATE` сервер тихо игнорирует.
+
+## Invite-ссылки
+
+Свежий канал/группа уже имеет приватную ссылку в `chat["link"]`.
+Пересоздать её (revoke) можно так:
+
+```python
+new_link = await app.revoke_invite_link(chat_id)
+print(new_link)  # https://max.ru/join/<новый токен>
+```
+
+Или через типизированный `Chat`:
+
+```python
+chat = await app.get_chat(chat_id)
+new_link = await chat.revoke_invite_link()
+```
+
+Внутри посылается `CHAT_UPDATE` с `{"revokePrivateLink": True}` —
+старая ссылка сразу перестаёт работать. Резолвить чужую ссылку без
+вступления: `await app.check_chat_link(link)` или
+`await app.get_link_info(link)`.
 
 ## Участники
 
@@ -115,6 +151,24 @@ await client.get_common_participants(chat_id)
 await client.get_chat_suggestions()
 await client.public_search("news", count=10)
 await client.get_link_info("https://max.ru/...")
+```
+
+## Методы на `Chat`
+
+Если получаешь `Chat` через `Client.get_chat()`:
+
+```python
+chat = await app.get_chat(chat_id)
+
+await chat.send("hello")
+await chat.send_photo("photo.jpg")
+await chat.send_video("clip.mp4")
+await chat.send_file("doc.pdf")
+await chat.send_poll("title", ["да", "нет"])
+await chat.leave()
+await chat.mute()
+await chat.unmute()
+new_link = await chat.revoke_invite_link()
 ```
 
 ## Уведомления

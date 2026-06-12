@@ -265,6 +265,24 @@ async def set_chat_photo(client: "MaxClient", chat_id: int, photo_token: str) ->
     return await update_chat(client, chat_id, photoToken=photo_token)
 
 
+async def revoke_invite_link(client: "MaxClient", chat_id: int) -> str | None:
+    packet = await client.invoke(
+        Opcode.CHAT_UPDATE,
+        {"chatId": chat_id, "revokePrivateLink": True},
+    )
+    payload = packet.payload if isinstance(packet.payload, dict) else {}
+    chat = payload.get("chat") if isinstance(payload.get("chat"), dict) else None
+    link = chat.get("link") if isinstance(chat, dict) else None
+    if isinstance(link, str) and link:
+        return link
+    fresh = await get_chat_info(client, chat_id)
+    if isinstance(fresh, dict):
+        link = fresh.get("link")
+        if isinstance(link, str) and link:
+            return link
+    return None
+
+
 async def set_chat_mute(client: "MaxClient", chat_id: int, dont_disturb_until: int) -> Packet:
     return await client.invoke(
         Opcode.CONFIG,
