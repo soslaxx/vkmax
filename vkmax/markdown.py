@@ -17,6 +17,7 @@ ELEMENT_TYPES = (
 _INLINE_PATTERN = re.compile(
     r"(?P<bold>\*\*(?P<bold_text>.+?)\*\*)"
     r"|(?P<under>__(?P<under_text>.+?)__)"
+    r"|(?P<italic_us>(?<![\w_])_(?P<italic_us_text>[^_\n][^_\n]*?)_(?![\w_]))"
     r"|(?P<italic>\*(?P<italic_text>[^*\n]+?)\*)"
     r"|(?P<strike>~~(?P<strike_text>.+?)~~)"
     r"|(?P<strike1>~(?P<strike1_text>[^~\n]+?)~)"
@@ -122,6 +123,8 @@ def _classify(match: re.Match[str]) -> tuple[str, str | None, dict[str, Any] | N
         return "STRONG", match.group("bold_text"), None
     if match.group("under") is not None:
         return "UNDERLINE", match.group("under_text"), None
+    if match.group("italic_us") is not None:
+        return "EMPHASIZED", match.group("italic_us_text"), None
     if match.group("italic") is not None:
         return "EMPHASIZED", match.group("italic_text"), None
     if match.group("strike") is not None:
