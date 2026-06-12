@@ -26,6 +26,10 @@ _INLINE_PATTERN = re.compile(
 )
 
 
+def _utf16_len(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2
+
+
 @dataclass(slots=True)
 class _Element:
     type: str
@@ -43,15 +47,16 @@ class _Element:
 
 
 def parse_markdown(text: str) -> tuple[str, list[dict[str, Any]]]:
+    text = text or ""
     plain_parts: list[str] = []
     elements: list[_Element] = []
-    cursor = 0
-    text = text or ""
+    base_offset = 0
 
     for line in _split_lines(text):
-        line_text, line_elements = _parse_line(line, len("".join(plain_parts)))
+        line_text, line_elements = _parse_line(line, base_offset)
         plain_parts.append(line_text)
         elements.extend(line_elements)
+        base_offset += _utf16_len(line_text)
 
     plain = "".join(plain_parts)
     if not elements:
@@ -72,20 +77,19 @@ def _split_lines(text: str) -> list[str]:
 
 
 def _parse_line(line: str, base_offset: int) -> tuple[str, list[_Element]]:
-    quote_active = False
     if line.lstrip().startswith("> "):
-        stripped = line.lstrip()[2:]
         leading = line[: len(line) - len(line.lstrip())]
+        stripped = line.lstrip()[2:]
         line_for_inline = leading + stripped
         quote_active = True
     else:
         line_for_inline = line
+        quote_active = False
 
     plain, inline = _parse_inline(line_for_inline, base_offset)
     if quote_active and plain.strip():
-        start = base_offset + (len(plain) - len(plain.lstrip("\r\n")))
         quote_text = plain.rstrip("\r\n")
-        inline.append(_Element("QUOTE", base_offset, len(quote_text)))
+        inline.append(_Element("QUOTE", base_offset, _utf16_len(quote_text)))
     return plain, inline
 
 
@@ -97,14 +101,14 @@ def _parse_inline(text: str, base_offset: int) -> tuple[str, list[_Element]]:
         if match.start() > cursor:
             out_chars.append(text[cursor:match.start()])
         kind, inner, attrs = _classify(match)
-        start_index = base_offset + sum(len(s) for s in out_chars)
+        start_index = base_offset + _utf16_len("".join(out_chars))
         if inner is None:
             out_chars.append(match.group(0))
         else:
             inner_plain, inner_elements = _parse_inline(inner, start_index)
             out_chars.append(inner_plain)
             elements.append(
-                _Element(kind, start_index, len(inner_plain), attributes=attrs)
+                _Element(kind, start_index, _utf16_len(inner_plain), attributes=attrs)
             )
             elements.extend(inner_elements)
         cursor = match.end()

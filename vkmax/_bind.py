@@ -10,7 +10,8 @@ if TYPE_CHECKING:
     from .client import MaxClient
 
 _MESSAGES = [
-    "send_message", "send_markdown", "reply_message", "edit_message", "edit_markdown",
+    "send_message", "send_markdown", "send_html", "reply_message",
+    "edit_message", "edit_markdown", "edit_html",
     "delete_messages", "delete_message_range",
     "forward_message", "pin_message", "unpin_message", "send_typing", "fetch_history",
     "fetch_messages", "get_message", "mark_read", "react_message", "cancel_reaction",

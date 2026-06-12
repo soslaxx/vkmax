@@ -7,6 +7,7 @@ from typing import Any, TYPE_CHECKING
 
 from .enums import Opcode
 from .exceptions import PacketError, UploadError
+from .html_parse import parse_html
 from .markdown import parse_markdown
 from .models import FileUpload, Message, Packet
 from .reactions import resolve_reaction
@@ -25,13 +26,11 @@ async def send_message(
     reply_to: int | str | None = None,
     elements: list[dict[str, Any]] | None = None,
     markdown: bool = False,
+    html: bool = False,
 ) -> str:
-    final_text = text
-    final_elements = list(elements) if elements else []
-    if markdown:
-        parsed_text, parsed_elements = parse_markdown(text)
-        final_text = parsed_text
-        final_elements = parsed_elements + final_elements
+    if markdown and html:
+        raise ValueError("choose either markdown or html, not both")
+    final_text, final_elements = _apply_format(text, elements, markdown=markdown, html=html)
     message: dict[str, Any] = {
         "text": final_text,
         "cid": -int(time.time() * 1000),
@@ -63,6 +62,44 @@ async def send_markdown(
     )
 
 
+async def send_html(
+    client: "MaxClient",
+    chat_id: int,
+    text: str,
+    *,
+    notify: bool = True,
+    reply_to: int | str | None = None,
+) -> str:
+    return await send_message(
+        client,
+        chat_id,
+        text,
+        notify=notify,
+        reply_to=reply_to,
+        html=True,
+    )
+
+
+def _apply_format(
+    text: str,
+    elements: list[dict[str, Any]] | None,
+    *,
+    markdown: bool,
+    html: bool,
+) -> tuple[str, list[dict[str, Any]]]:
+    final_text = text
+    final_elements = list(elements) if elements else []
+    if markdown:
+        parsed_text, parsed_elements = parse_markdown(text)
+        final_text = parsed_text
+        final_elements = parsed_elements + final_elements
+    elif html:
+        parsed_text, parsed_elements = parse_html(text)
+        final_text = parsed_text
+        final_elements = parsed_elements + final_elements
+    return final_text, final_elements
+
+
 async def reply_message(
     client: "MaxClient",
     chat_id: int,
@@ -83,13 +120,11 @@ async def edit_message(
     notify: bool = True,
     elements: list[dict[str, Any]] | None = None,
     markdown: bool = False,
+    html: bool = False,
 ) -> Packet:
-    final_text = text
-    final_elements = list(elements) if elements else []
-    if markdown:
-        parsed_text, parsed_elements = parse_markdown(text)
-        final_text = parsed_text
-        final_elements = parsed_elements + final_elements
+    if markdown and html:
+        raise ValueError("choose either markdown or html, not both")
+    final_text, final_elements = _apply_format(text, elements, markdown=markdown, html=html)
     payload: dict[str, Any] = {
         "chatId": chat_id,
         "messageId": int(message_id),
@@ -116,6 +151,24 @@ async def edit_markdown(
         text,
         notify=notify,
         markdown=True,
+    )
+
+
+async def edit_html(
+    client: "MaxClient",
+    chat_id: int,
+    message_id: int | str,
+    text: str,
+    *,
+    notify: bool = True,
+) -> Packet:
+    return await edit_message(
+        client,
+        chat_id,
+        message_id,
+        text,
+        notify=notify,
+        html=True,
     )
 
 

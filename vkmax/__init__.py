@@ -25,6 +25,7 @@ from .models import (
 )
 from ._contacts import dm_chat_id
 from ._notify import MUTE_FOREVER, MUTE_OFF
+from .html_parse import parse_html
 from .markdown import parse_markdown
 from .privacy import (
     FamilyProtectionLevel,
@@ -71,6 +72,7 @@ __all__ = [
     "create_device_session",
     "default_session_path",
     "dm_chat_id",
+    "parse_html",
     "parse_markdown",
     "load_or_create_session",
     "resolve_reaction",
