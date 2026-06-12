@@ -37,9 +37,9 @@ async def send_message(
         "elements": final_elements,
         "attaches": [],
     }
-    payload: dict[str, Any] = {"chatId": chat_id, "message": message, "notify": notify}
     if reply_to is not None:
-        payload["link"] = {"type": "REPLY", "messageId": str(reply_to)}
+        message["link"] = {"type": "REPLY", "messageId": int(reply_to)}
+    payload: dict[str, Any] = {"chatId": chat_id, "message": message, "notify": notify}
     packet = await client.invoke(Opcode.MSG_SEND, payload)
     return _extract_message_id(packet)
 
@@ -177,11 +177,13 @@ async def delete_messages(
     chat_id: int,
     message_ids: list[int | str],
     *,
-    for_all: bool = False,
+    for_all: bool = True,
 ) -> Packet:
-    payload: dict[str, Any] = {"chatId": chat_id, "messageIds": [int(mid) for mid in message_ids]}
-    if for_all:
-        payload["forAll"] = True
+    payload: dict[str, Any] = {
+        "chatId": chat_id,
+        "messageIds": [int(mid) for mid in message_ids],
+        "forMe": not for_all,
+    }
     return await client.invoke(Opcode.MSG_DELETE, payload)
 
 
@@ -213,11 +215,11 @@ async def forward_message(
                 "cid": -int(time.time() * 1000),
                 "elements": [],
                 "attaches": [],
-            },
-            "link": {
-                "type": "FORWARD",
-                "chatId": from_chat_id,
-                "messageId": int(message_id),
+                "link": {
+                    "type": "FORWARD",
+                    "chatId": from_chat_id,
+                    "messageId": int(message_id),
+                },
             },
             "notify": notify,
         },
