@@ -155,6 +155,21 @@ class Chat:
             raise RuntimeError("Chat is detached from a client")
         return await self.client.revoke_invite_link(self.id)
 
+    async def promote_admin(self, user_id: int, **kwargs: Any) -> Any:
+        if self.client is None:
+            raise RuntimeError("Chat is detached from a client")
+        return await self.client.promote_admin(self.id, user_id, **kwargs)
+
+    async def demote_admin(self, user_id: int) -> Any:
+        if self.client is None:
+            raise RuntimeError("Chat is detached from a client")
+        return await self.client.demote_admin(self.id, user_id)
+
+    async def list_admins(self) -> Any:
+        if self.client is None:
+            raise RuntimeError("Chat is detached from a client")
+        return await self.client.list_admins(self.id)
+
     @classmethod
     def from_dict(cls, data: dict[str, Any], *, client: "Client | None" = None) -> "Chat":
         admins_raw = data.get("admins", []) or data.get("adminParticipants", {})

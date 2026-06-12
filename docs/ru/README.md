@@ -27,8 +27,9 @@
 
 ## Чаты и пользователи
 
-- [chats.md](chats.md) — список, группы, каналы, участники, админы,
-  mute, join links.
+- [chats.md](chats.md) — список, группы, каналы, участники, mute,
+  join links.
+- [admins.md](admins.md) — права админов и хелперы.
 - [contacts.md](contacts.md) — поиск, по номеру, блок/разблок.
 - [folders.md](folders.md) — папки чатов.
 

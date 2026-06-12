@@ -24,6 +24,7 @@ from .models import (
     UploadProgress,
     VerifyCodeResult,
 )
+from .admin import ADMIN_PERMISSION_VALUES, AdminPermissions
 from ._contacts import dm_chat_id
 from ._messages import POLL_ANONYMOUS, POLL_MULTIPLE, POLL_QUIZ
 from ._notify import MUTE_FOREVER, MUTE_OFF
@@ -43,6 +44,8 @@ from .types import Chat as ChatType, Message as MessageType, User as UserType
 __version__ = "2.0.0"
 
 __all__ = [
+    "ADMIN_PERMISSION_VALUES",
+    "AdminPermissions",
     "Attachment",
     "AuthError",
     "Chat",

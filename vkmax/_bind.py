@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from . import _chats, _contacts, _messages, _misc, _notify, _profile, privacy
+from . import _chats, _contacts, _messages, _misc, _notify, _profile, admin as _admin, privacy
 from .exceptions import SessionExpired, TransportClosed
 
 if TYPE_CHECKING:
@@ -68,6 +68,11 @@ _NOTIFY = [
     "mute_chat_for", "set_chats_mute",
 ]
 
+_ADMIN = [
+    "promote_admin", "update_admin_permissions", "demote_admin",
+    "get_admin_permissions", "list_admins",
+]
+
 _PRIVACY = [
     "get_privacy_config", "update_privacy_config", "set_privacy",
     "set_search_by_phone", "set_incoming_call", "set_chats_invite",
@@ -104,6 +109,8 @@ def bind_methods(cls) -> None:
         setattr(cls, name, _wrap(_profile, name))
     for name in _NOTIFY:
         setattr(cls, name, _wrap(_notify, name))
+    for name in _ADMIN:
+        setattr(cls, name, _wrap(_admin, name))
     for name in _PRIVACY:
         setattr(cls, name, _wrap(privacy, name))
 

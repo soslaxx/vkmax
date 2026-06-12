@@ -29,8 +29,9 @@ filters, typed `Message`/`Chat`/`User`.
 
 ## Chats & users
 
-- [chats.md](chats.md) — list, groups, channels, members, admins,
-  mute, join links.
+- [chats.md](chats.md) — list, groups, channels, members, mute,
+  join links.
+- [admins.md](admins.md) — admin permissions and helpers.
 - [contacts.md](contacts.md) — fetch users, by phone, block/unblock.
 - [folders.md](folders.md) — chat folders.
 
