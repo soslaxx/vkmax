@@ -1,97 +1,131 @@
 # vkmax
-Python user client for VK MAX messenger (OneMe)
 
-## What is VK MAX?
-MAX (internal code name OneMe) is another project by the Russian government in an attempt to create a unified domestic messaging platform with features such as login via the government services account (Gosuslugi/ESIA).  
-It is developed by VK Group.  
+Async Python client for the MAX messenger (max.ru / OneMe) **mobile API**.
 
-## What is `vkmax`?
-This is a client library for MAX, allowing to create userbots and custom clients.  
-An example of a simple userbot that retrieves weather can be found at [examples/weather-userbot](examples/weather-userbot).
+Unlike the older WebSocket-based web API, this version speaks the binary
+mobile protocol (`api.oneme.ru:443`, TLS + msgpack + LZ4) used by the
+official Android app. That gives access to a much larger set of methods
+and to data the web protocol does not expose.
+
+## What is MAX?
+
+MAX (internal code name OneMe) is a Russian messenger developed by VK
+Group, integrated with Gosuslugi/ESIA. This library lets you build
+userbots and custom clients on top of it.
 
 ## Installation
-The package is [available on PyPI](https://pypi.org/project/vkmax/)  
-`pip install vkmax`
 
-## Usage
-More in [examples](examples/)
-```python
-import asyncio
-from pathlib import Path
-
-import aiohttp
-
-from vkmax.client import MaxClient
-from vkmax.functions.messages import edit_message
-
-
-# global aiohttp session
-http = None
-
-
-async def get_weather(city: str) -> str:
-    global http
-    if not http:
-        http = aiohttp.ClientSession()
-    response = await http.get(f"https://ru.wttr.in/{city}?Q&T&format=3")
-    return await response.text()
-
-
-async def packet_callback(client: MaxClient, packet: dict):
-    if packet['opcode'] == 128:
-        message_text: str = packet['payload']['message']['text']
-        if message_text not in ['.info', '.weather']:
-            return
-
-        if message_text == ".info":
-            text = "Userbot connected"
-
-        elif ".weather" in message_text:
-            city = message_text.split()[1]
-            text = await get_weather(city)
-
-        await edit_message(
-            client,
-            packet["payload"]["chatId"],
-            packet["payload"]["message"]["id"],
-            text
-        )
-
-
-async def main():
-    client = MaxClient()
-    await client.connect()
-
-    session_file = Path('max_session.txt')
-
-    if not session_file.exists():
-        phone_number = input('Enter your phone number: ')
-        sms_token = await client.send_code(phone_number)
-        sms_code = int(input('Enter SMS code: '))
-        account_data = await client.sign_in(sms_token, sms_code)
-
-        device_id = client.device_id
-        login_token = account_data['payload']['tokenAttrs']['LOGIN']['token']
-
-        # save device uuid and auth token delimited by newline
-        session_file.write_text(f'{device_id}\n{login_token}')
-
-    else:
-        contents = session_file.read_text()
-        device_id, login_token = contents.split('\n', maxsplit=1)
-        try:
-            await client.login_by_token(login_token, device_id)
-        except:
-            print("Couldn't login by token")
-
-    await client.set_callback(packet_callback)
-
-    await asyncio.Future()  # run forever
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+```bash
+pip install vkmax
 ```
 
-- [Protocol description](docs/protocol.md)
-- [Known opcodes](docs/opcodes.md)
+Dependencies: `msgpack`, `lz4` (and optionally `zstandard` for the
+`zstd` extra).
+
+## Quick start
+
+```python
+import asyncio
+from vkmax import MaxClient, Packet
+
+
+async def get_code() -> str:
+    return input("SMS code: ").strip()
+
+
+async def main() -> None:
+    client = MaxClient("main")
+
+    if client.device.token:
+        await client.start(token=client.device.token)
+    else:
+        phone = input("Phone (+7...): ").strip()
+        await client.start(phone=phone, code_callback=get_code)
+
+    print(f"Logged in as {client.account_id}")
+
+    @client.on_message
+    async def on_message(packet: Packet) -> None:
+        payload = packet.payload or {}
+        message = payload.get("message") or {}
+        if message.get("sender") == client.account_id:
+            return
+        text = message.get("text") or ""
+        if text.startswith(".ping"):
+            await client.send_message(
+                payload["chatId"], "pong", reply_to=message["id"]
+            )
+
+    await asyncio.Event().wait()
+
+
+asyncio.run(main())
+```
+
+The session (device id, instance id, auth token) is cached at
+`~/.vkmax/main.json`, so subsequent runs reuse the token automatically.
+
+## Highlights
+
+- Async, single-class API (`MaxClient`) with 140+ methods.
+- Binary mobile protocol with transparent LZ4 compression.
+- Automatic reconnect + re-login after server-side disconnects.
+- Event handlers per opcode: `client.on(Opcode.NOTIF_MESSAGE, handler)`
+  or the shortcut `@client.on_message`.
+- Typed result models (`Message`, `Chat`, `Contact`, `ReactionInfo`,
+  `Attachment`) plus raw `Packet` access for advanced use.
+- File and photo uploads, sticker packs, reactions, message search,
+  groups, folders, polls, call history.
+
+## Common operations
+
+```python
+await client.send_message(chat_id, "hello")
+await client.reply_message(chat_id, message_id, "reply")
+await client.edit_message(chat_id, message_id, "edited")
+await client.delete_messages(chat_id, [message_id], for_all=True)
+
+await client.react_message(chat_id, message_id, "fire")  # or any emoji
+await client.cancel_reaction(chat_id, message_id)
+reactions = await client.get_reactions(chat_id, message_id)
+
+chats = await client.list_chats()
+group = await client.get_chat(chat_id)
+members = await client.get_chat_members(chat_id)
+
+await client.upload_photo("image.jpg")
+await client.upload_file(chat_id, "doc.pdf")
+
+results = await client.public_search("news")
+folders = await client.get_folders()
+```
+
+## Low-level
+
+For opcodes the wrappers don't cover yet:
+
+```python
+from vkmax import Opcode
+packet = await client.invoke(Opcode.MSG_GET_STAT, {
+    "chatId": chat_id, "messageId": message_id,
+})
+print(packet.payload)
+```
+
+Full list of opcodes: see `vkmax.enums.Opcode`.
+
+## Notes
+
+- The server enforces strict payload validation and will close the
+  TCP connection on any rejected payload. `vkmax` reconnects and
+  re-authenticates automatically; your next call just works.
+- Reaction IDs accept either an emoji (`"\u2764\ufe0f"`) or an alias
+  (`"heart"`, `"fire"`, `"like"`, ...). See `vkmax.REACTION_ALIASES`.
+- `messageId` fields are sent as **integers** on the mobile API
+  (unlike the web API which used strings).
+- Account deletion and privacy settings are intentionally not
+  implemented.
+
+## License
+
+MIT.

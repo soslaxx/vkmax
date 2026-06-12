@@ -1,25 +1,36 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "vkmax"
-version = "1.0.2"
-description = "Python client for MAX messenger"
+version = "2.0.0"
+description = "Async Python client for MAX messenger mobile API"
 readme = "README.md"
-authors = [{name = "nsdkinx", email = "nsdkinx@ya.ru" }]
+authors = [{name = "nsdkinx", email = "nsdkinx@ya.ru"}]
 license = { file = "LICENSE" }
 classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Topic :: Communications :: Chat",
 ]
-keywords = ["vk", "vkapi", "max-messenger", "vkmax", "oneme"]
+keywords = ["max", "max-messenger", "vkmax", "oneme", "mobile-api"]
 dependencies = [
-    "aiohttp",
-    "websockets",
+    "msgpack>=1.0",
+    "lz4>=4.0",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
+
+[project.optional-dependencies]
+zstd = ["zstandard>=0.21"]
 
 [project.urls]
 Homepage = "https://github.com/nsdkinx/vkmax"
-News = "https://t.me/max_messenger_python"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vkmax*"]
+exclude = ["AMAXLIB*", "komet*", "examples*", "docs*"]

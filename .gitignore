@@ -74,9 +74,11 @@ docs/_build/
 # PyBuilder
 .pybuilder/
 target/
-
+userbot.py
 # Jupyter Notebook
 .ipynb_checkpoints
+AMAXLIB
+komet
 
 # IPython
 profile_default/
