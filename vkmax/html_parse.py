@@ -42,7 +42,7 @@ class _Element:
         if not omit_zero or self.start:
             data["from"] = self.start
         if self.attributes:
-            data.update(self.attributes)
+            data["attributes"] = dict(self.attributes)
         return data
 
 

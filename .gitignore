@@ -78,6 +78,7 @@ userbot.py
 # Jupyter Notebook
 .ipynb_checkpoints
 AMAXLIB
+libtest.py
 komet
 
 # IPython
