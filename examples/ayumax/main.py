@@ -1,56 +1,48 @@
-import sqlite3
-import logging
+from __future__ import annotations
 
-from vkmax.client import MaxClient
-from vkmax.functions.messages import send_message
+import sys
 
-_logger = logging.getLogger(__name__)
+from vkmax import Client, MessageType, filters
 
-async def sql(cmd: str):
-    db = sqlite3.connect('vkmax//features//ayumax//messages.db'); cur = db.cursor(); cur.execute(cmd); db.commit()
-    fetcher = cur.fetchall(); cur.close(); db.close()
-    if "SELECT" in cmd:
-        return fetcher
-    
-async def incoming_message(chat_id: int, message_id: int, text: str):
-    await sql(f"INSERT INTO messages(message_id, chat_id, text) VALUES({message_id}, {chat_id}, '{text}')")
+app = Client("main")
 
-async def edited_message(message_id: int, edited_text: str):
-    if await sql(f"SELECT * FROM messages WHERE message_id = {message_id}") != []:
-        await sql(f"UPDATE messages SET edited_text = '{edited_text}', status = 'EDITED' WHERE message_id = {message_id}")
-    else:
-        await sql(f"INSERT INTO messages(message_id, edited_text, status) VALUES({message_id}, '{edited_text}', 'EDITED')")
+_cache: dict[int, dict] = {}
+_CACHE_LIMIT = 5000
 
-async def deleted_message(message_id: int):
-    if await sql(f"SELECT * FROM messages WHERE message_id = {message_id}") != []:
-        await sql(f"UPDATE messages SET status = 'REMOVED' WHERE message_id = {message_id}")
-    else:
-        await sql(f"INSERT INTO messages(message_id, status) VALUES({message_id}, 'DELETED')")
 
-async def get_edited_messages(chat_id: int):
-    return await sql(f"SELECT * FROM messages WHERE chat_id = {chat_id} AND status = 'EDITED'")
+def _remember(message: MessageType) -> None:
+    if len(_cache) >= _CACHE_LIMIT:
+        for stale in list(_cache.keys())[: _CACHE_LIMIT // 5]:
+            _cache.pop(stale, None)
+    _cache[int(message.id)] = {
+        "chat_id": int(message.chat_id),
+        "sender_id": int(message.sender_id),
+        "text": message.text or "",
+    }
 
-async def get_deleted_messages(chat_id: int):
-    return await sql(f"SELECT * FROM messages WHERE chat_id = {chat_id} AND status = 'REMOVED'")
 
-async def ayumax_callback(client: MaxClient, packet: dict):
-    """ аюграм подкрался незаметно... """
-    if packet['opcode'] == 128:
-        message_text = packet['payload']['message']['text']
-        print(packet)
-        if (
-            'status' in packet['payload']['message']
-            and packet['payload']['message']['status'] == "REMOVED"
-        ):
-            await deleted_message(packet['payload']['message']['id'])
-            await send_message(client, packet["payload"]["chatId"], text=f"Собеседник удалил сообщение: {message_text}")
+@app.on_message(filters.incoming)
+async def stash(client: Client, message: MessageType) -> None:
+    if message.is_edited or message.is_removed:
+        return
+    _remember(message)
 
-        elif (
-            'status' in packet['payload']['message']
-            and packet['payload']['message']['status'] == "EDITED"
-        ):
-            await edited_message(int(packet["payload"]["message"]["id"]), message_text)
-            previous_message = await sql(f"SELECT text FROM messages WHERE message_id = {int(packet["payload"]["message"]["id"])}")
-            await send_message(client, packet["payload"]["chatId"], text=f"Собеседник изменил сообщение: {previous_message[0][0]}")
-        else:
-            await incoming_message(packet["payload"]["chatId"], int(packet["payload"]["message"]["id"]), message_text)
+
+@app.on_deleted_message()
+async def on_deleted(client: Client, message: MessageType) -> None:
+    cached = _cache.pop(int(message.id), None)
+    if not cached or cached["sender_id"] == client.account_id:
+        return
+    text = cached["text"]
+    if not text:
+        return
+    await client.send_message(
+        message.chat_id,
+        f"\U0001f5d1\ufe0f **ты удалил сообщение:**\n__{text}__",
+        markdown=True,
+    )
+
+
+if __name__ == "__main__":
+    print("ayumax online \u2014 \u043b\u043e\u0432\u0438\u043c \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u044f")
+    app.run()

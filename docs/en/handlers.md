@@ -10,7 +10,7 @@ decorators on the `Client`.
 |---|---|---|
 | `@app.on_message(filter)` | new / received message | 128 `NOTIF_MESSAGE` |
 | `@app.on_edited_message(filter)` | message was edited | 128 + `filters.edited` |
-| `@app.on_deleted_message(filter)` | one message deleted | 142 `NOTIF_MSG_DELETE` |
+| `@app.on_deleted_message(filter)` | one message deleted (per id) | 142 `NOTIF_MSG_DELETE`, 140 `NOTIF_MSG_DELETE_RANGE` |
 | `@app.on_reaction(filter)` | reactions changed | 155 `NOTIF_MSG_REACTIONS_CHANGED` |
 | `@app.on_typing(filter)` | typing indicator | 129 `NOTIF_TYPING` |
 | `@app.on_event(opcode, filter)` | any opcode | custom |
@@ -73,6 +73,50 @@ app.add_handler(
     group=5,
 )
 ```
+
+## Deleted messages
+
+The server doesn't ship the original text or sender along with a
+delete event — it sends just `{chat, messageIds, ttl}`. `vkmax`
+still synthesises a `Message` for every id in `messageIds` so your
+handler can stay typed and use filters:
+
+```python
+@app.on_deleted_message(filters.chat(-75800508459204))
+async def caught(app, message):
+    print("deleted", message.id, "in chat", message.chat_id)
+```
+
+What the synthetic `Message` looks like:
+
+- `message.id` — id of the deleted message (str).
+- `message.chat_id` — chat where it happened.
+- `message.status == "REMOVED"`.
+- `message.text is None`, `message.sender_id == 0`,
+  `message.attachments == []` — the server doesn't tell.
+- `message.raw` — the original `{chat, messageIds, ttl}` dict.
+
+To know **what** was deleted you have to cache messages yourself when
+they arrive (see `examples/ayumax/main.py`):
+
+```python
+_cache: dict[int, str] = {}
+
+
+@app.on_message(filters.incoming)
+async def stash(app, m):
+    _cache[int(m.id)] = m.text or ""
+
+
+@app.on_deleted_message()
+async def on_delete(app, m):
+    text = _cache.pop(int(m.id), None)
+    if text:
+        await app.send_message(m.chat_id, f"deleted: {text}")
+```
+
+`NOTIF_MSG_DELETE_RANGE` (140) is delivered the same way — your
+handler is called once per id in the range.
 
 ## Raw events
 

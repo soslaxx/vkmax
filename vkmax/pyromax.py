@@ -18,6 +18,11 @@ from .types import Chat, Message, User
 
 Handler = Callable[["Client", Message], Awaitable[Any] | Any]
 
+_DELETION_OPCODES = frozenset({
+    int(Opcode.NOTIF_MSG_DELETE),
+    int(Opcode.NOTIF_MSG_DELETE_RANGE),
+})
+
 
 @dataclass(slots=True)
 class _Subscription:
@@ -150,18 +155,65 @@ class Client(MaxClient):
         subs = self._subscriptions.get(opcode)
         if not subs:
             return
-        message = Message.from_payload(packet.payload, self) if isinstance(packet.payload, dict) else None
-        if message is None:
-            return
-        for sub in subs:
-            try:
-                if sub.filter is not None and not await sub.filter(message):
+        messages = self._materialise_event(opcode, packet)
+        for message in messages:
+            for sub in subs:
+                try:
+                    if sub.filter is not None and not await sub.filter(message):
+                        continue
+                    result = sub.callback(self, message)
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception as exc:
+                    print(f"[vkmax] handler error in {sub.callback.__name__}: {exc}")
+
+    def _materialise_event(self, opcode: int, packet: Packet) -> list[Message]:
+        payload = packet.payload if isinstance(packet.payload, dict) else None
+        if payload is None:
+            return []
+        if opcode in _DELETION_OPCODES:
+            return self._materialise_deletion(payload)
+        msg = Message.from_payload(payload, self)
+        return [msg] if msg is not None else []
+
+    def _materialise_deletion(self, payload: dict[str, Any]) -> list[Message]:
+        chat = payload.get("chat") if isinstance(payload.get("chat"), dict) else None
+        chat_id = chat.get("id") if isinstance(chat, dict) else None
+        if chat_id is None:
+            chat_id = payload.get("chatId")
+        try:
+            chat_id_int = int(chat_id) if chat_id is not None else 0
+        except (TypeError, ValueError):
+            chat_id_int = 0
+        ids: list[int] = []
+        raw_ids = payload.get("messageIds") or []
+        if isinstance(raw_ids, list):
+            for raw_id in raw_ids:
+                try:
+                    ids.append(int(raw_id))
+                except (TypeError, ValueError):
                     continue
-                result = sub.callback(self, message)
-                if inspect.isawaitable(result):
-                    await result
-            except Exception as exc:
-                print(f"[vkmax] handler error in {sub.callback.__name__}: {exc}")
+        if not ids:
+            return []
+        messages: list[Message] = []
+        for mid in ids:
+            messages.append(
+                Message(
+                    id=str(mid),
+                    chat_id=chat_id_int,
+                    sender_id=0,
+                    text=None,
+                    time=0,
+                    status="REMOVED",
+                    reactions=None,
+                    attachments=[],
+                    forward=None,
+                    reply_to_message_id=None,
+                    raw=payload,
+                    client=self,
+                )
+            )
+        return messages
 
     async def get_me(self) -> User:
         if self.me is None:

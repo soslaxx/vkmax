@@ -10,7 +10,7 @@
 |---|---|---|
 | `@app.on_message(filter)` | новое / полученное сообщение | 128 `NOTIF_MESSAGE` |
 | `@app.on_edited_message(filter)` | сообщение отредактировано | 128 + `filters.edited` |
-| `@app.on_deleted_message(filter)` | удалили сообщение | 142 `NOTIF_MSG_DELETE` |
+| `@app.on_deleted_message(filter)` | удалили сообщение (по одному id) | 142 `NOTIF_MSG_DELETE`, 140 `NOTIF_MSG_DELETE_RANGE` |
 | `@app.on_reaction(filter)` | реакции изменились | 155 `NOTIF_MSG_REACTIONS_CHANGED` |
 | `@app.on_typing(filter)` | индикатор печати | 129 `NOTIF_TYPING` |
 | `@app.on_event(opcode, filter)` | любой опкод | свой |
@@ -69,6 +69,50 @@ app.add_handler(
     group=5,
 )
 ```
+
+## Удалённые сообщения
+
+Сервер **не присылает** ни текст, ни отправителя при удалении —
+только `{chat, messageIds, ttl}`. `vkmax` сам собирает синтетический
+`Message` для каждого id из `messageIds`, чтобы обработчик оставался
+типизированным и работали фильтры:
+
+```python
+@app.on_deleted_message(filters.chat(-75800508459204))
+async def caught(app, message):
+    print("удалили", message.id, "в чате", message.chat_id)
+```
+
+Что внутри такого `Message`:
+
+- `message.id` — id удалённого сообщения (str).
+- `message.chat_id` — чат, где удалили.
+- `message.status == "REMOVED"`.
+- `message.text is None`, `message.sender_id == 0`,
+  `message.attachments == []` — сервер не отдаёт.
+- `message.raw` — исходный dict `{chat, messageIds, ttl}`.
+
+Чтобы знать **что именно** удалили, кэшируй сообщения при получении
+(см. `examples/ayumax/main.py`):
+
+```python
+_cache: dict[int, str] = {}
+
+
+@app.on_message(filters.incoming)
+async def stash(app, m):
+    _cache[int(m.id)] = m.text or ""
+
+
+@app.on_deleted_message()
+async def on_delete(app, m):
+    text = _cache.pop(int(m.id), None)
+    if text:
+        await app.send_message(m.chat_id, f"удалено: {text}")
+```
+
+`NOTIF_MSG_DELETE_RANGE` (140) приходит так же — хендлер вызывается
+по одному разу на каждый id в диапазоне.
 
 ## Raw-события
 
