@@ -123,8 +123,7 @@ Full list of opcodes: see `vkmax.enums.Opcode`.
   (`"heart"`, `"fire"`, `"like"`, ...). See `vkmax.REACTION_ALIASES`.
 - `messageId` fields are sent as **integers** on the mobile API
   (unlike the web API which used strings).
-- Account deletion and privacy settings are intentionally not
-  implemented.
+- This is BETA version, if you have questions or you see bug please write me in telegram: https://t.me/soslaxx
 
 ## License
 
